@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Symulacja drona 2D</title>
+    <style>
+        body { background: #222; color: #eee; font-family: sans-serif; margin: 0; }
+        #sim-canvas { background: #111; display: block; margin: 20px auto; border: 2px solid #444; }
+        #controls { display: flex; justify-content: center; align-items: center; margin-top: 20px; gap: 40px; }
+        #joystick-container { width: 160px; height: 160px; position: relative; background: #222; border: 2px solid #555; border-radius: 50%; }
+        #reset-btn { padding: 10px 24px; font-size: 1.1em; border-radius: 8px; border: none; background: #444; color: #fff; cursor: pointer; }
+        #reset-btn:hover { background: #666; }
+        #log-panel-container {
+            position: fixed;
+            left: 0; top: 0;
+            width: 340px;
+            height: 100vh;
+            background: #222;
+            color: #fff;
+            z-index: 1000;
+            padding: 8px 8px 0 8px;
+            border-right: 2px solid #333;
+            font-family: sans-serif;
+        }
+        #log-panel {
+            margin-top: 6px;
+            height: calc(100vh - 40px);
+        }
+        #log-textarea {
+            background: #111;
+            color: #fff;
+            font-family: monospace;
+            font-size: 13px;
+            border: 1px solid #444;
+            box-sizing: border-box;
+            overflow-x: auto;
+            white-space: pre;
+            height: calc(100vh - 90px);
+            min-height: 80px;
+        }
+        #controls-panel {
+            position: fixed;
+            left: 360px;
+            top: 16px;
+            z-index: 1001;
+            background: #222;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px #0008;
+            padding: 18px 18px 18px 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 18px;
+        }
+        #controls-panel button, #controls-panel label {
+            font-size: 1.05em;
+            color: #fff;
+            margin-bottom: 0;
+        }
+        #pause-btn, #reset-btn, #copy-log-btn, #clear-log-btn {
+            padding: 8px 18px;
+            font-size: 1em;
+            border-radius: 8px;
+            border: none;
+            background: #444;
+            color: #fff;
+            cursor: pointer;
+            margin-right: 0;
+            margin-bottom: 0;
+        }
+        #pause-btn:hover, #reset-btn:hover, #copy-log-btn:hover, #clear-log-btn:hover {
+            background: #666;
+        }
+        body {
+            margin-left: 360px;
+        }
+        .logbar-btn {
+            padding: 4px 12px;
+            font-size: 0.98em;
+            border-radius: 6px;
+            border: none;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.15s;
+            box-shadow: 0 1px 2px #0004;
+        }
+        .logbar-btn:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div id="log-panel-container">
+        <label><input type="checkbox" id="show-log-checkbox"> Show log</label>
+        <div id="log-panel" style="display:none;">
+            <div style="margin-bottom:8px; display: flex; align-items: center; gap: 8px;">
+                <label style="flex:1;"><input type="checkbox" id="autoscroll-checkbox" checked> Autoscroll</label>
+                <button id="save-log-btn" class="logbar-btn">Save</button>
+                <button id="copy-log-btn" class="logbar-btn">Copy</button>
+                <button id="clear-log-btn" class="logbar-btn">Clear</button>
+            </div>
+            <textarea id="log-textarea" style="width:100%;height:calc(100vh - 90px);resize:none;overflow-x:auto;white-space:pre;"></textarea>
+        </div>
+    </div>
+    <div id="controls-panel">
+        <button id="pause-btn">Pause</button>
+        <button id="reset-btn">Reset</button>
+        <label style="margin-top:12px;"><input type="checkbox" id="thrust-vectors-checkbox" checked> Thrust vectors</label>
+        <label style="margin-top:12px;"><input type="checkbox" id="rate-pid-checkbox"> Roll rate PID</label>
+        <label style="margin-top:8px; opacity:0.5;" id="attitude-pid-label"><input type="checkbox" id="attitude-pid-checkbox" disabled> Attitude PID</label>
+        <label style="margin-top:8px;"><input type="checkbox" id="altitude-pid-checkbox"> Altitude PID</label>
+        <button id="pid-settings-btn" style="margin-top:14px;">PID settings</button>
+    </div>
+    <div id="pid-settings-panel" style="display:none; position:fixed; left:720px; top:16px; z-index:1002; background:#222; color:#fff; border-radius:8px; box-shadow:0 2px 8px #0008; padding:18px 24px; min-width:260px;">
+        <h3 style="margin-top:0;">PID settings</h3>
+        <div style="margin-bottom:10px;">
+            <b>Roll rate PID</b><br>
+            Kp: <input type="number" id="rate-kp" step="0.01" style="width:60px;"> 
+            Ki: <input type="number" id="rate-ki" step="0.01" style="width:60px;"> 
+            Kd: <input type="number" id="rate-kd" step="0.01" style="width:60px;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <b>Attitude PID</b><br>
+            Kp: <input type="number" id="att-kp" step="0.01" style="width:60px;"> 
+            Ki: <input type="number" id="att-ki" step="0.01" style="width:60px;"> 
+            Kd: <input type="number" id="att-kd" step="0.01" style="width:60px;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <b>Altitude PID</b><br>
+            Kp: <input type="number" id="alt-kp" step="0.01" style="width:60px;"> 
+            Ki: <input type="number" id="alt-ki" step="0.01" style="width:60px;"> 
+            Kd: <input type="number" id="alt-kd" step="0.01" style="width:60px;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <b>Vertical rate PID</b><br>
+            Kp: <input type="number" id="vrate-kp" step="0.01" style="width:60px;"> 
+            Ki: <input type="number" id="vrate-ki" step="0.01" style="width:60px;"> 
+            Kd: <input type="number" id="vrate-kd" step="0.01" style="width:60px;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <b>Maksymalna prędkość pionowa (vy)</b><br>
+            <input type="number" id="max-vy" step="1" style="width:80px;"> px/s
+        </div>
+        <div style="margin-bottom:10px;">
+            <b>Maksymalna prędkość obrotowa (roll rate)</b><br>
+            <input type="number" id="max-rollrate" step="1" style="width:80px;"> deg/s
+        </div>
+        <button id="close-pid-settings-btn" style="margin-top:8px;">Close</button>
+    </div>
+    <style>
+    #pid-settings-panel input[type=number] {
+        background: #111;
+        color: #fff;
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 2px 4px;
+        margin-right: 4px;
+    }
+    #pid-settings-panel h3 {
+        font-size: 1.15em;
+        margin-bottom: 10px;
+    }
+    </style>
+    <h1 style="text-align:center">2D Drone Simulation</h1>
+    <canvas id="sim-canvas" width="800" height="500"></canvas>
+    <div id="controls">
+        <div id="joystick-container"></div>
+    </div>
+    <script src="sim.js"></script>
+</body>
+</html> 
